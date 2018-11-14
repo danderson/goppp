@@ -1,0 +1,8 @@
+require-chap
+lcp-echo-interval 10
+lcp-echo-failure 2
+ms-dns 8.8.8.8
+netmask 255.255.255.0
+nodefaultroute
+noipdefault
+logfile /pppd.log
