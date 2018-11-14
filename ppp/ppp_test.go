@@ -19,11 +19,11 @@ func canUseDocker() error {
 func canUseRawSockets() error {
 	intf, err := net.InterfaceByName("docker0")
 	if err != nil {
-		return fmt.Errorf("getting interface: %s", err)
+		return fmt.Errorf("getting interface: %v", err)
 	}
 	conn, err := raw.ListenPacket(intf, protoPPPoEDiscovery, &raw.Config{LinuxSockDGRAM: true})
 	if err != nil {
-		return fmt.Errorf("creating PPPoE Discovery listener: %s", err)
+		return fmt.Errorf("creating PPPoE Discovery listener: %v", err)
 	}
 	defer conn.Close()
 	return nil
@@ -41,7 +41,7 @@ func canTest() error {
 
 func startServer() (func(), error) {
 	if err := canUseDocker(); err != nil {
-		return nil, fmt.Errorf("can't run docker: %s", err)
+		return nil, fmt.Errorf("can't run docker: %v", err)
 	}
 
 	cmd := exec.Command("docker", "run", "--rm", "-d", "--cap-add=NET_ADMIN", "--device=/dev/ppp", "goppp:testing")
@@ -76,12 +76,12 @@ func startServer() (func(), error) {
 
 func TestDiscovery(t *testing.T) {
 	if err := canTest(); err != nil {
-		t.Skipf("can't run privileged tests: %s", err)
+		t.Skipf("can't run privileged tests: %v", err)
 	}
 
 	close, err := startServer()
 	if err != nil {
-		t.Fatalf("couldn't start pppd container: %s", err)
+		t.Fatalf("couldn't start pppd container: %v", err)
 	}
 	defer close()
 
