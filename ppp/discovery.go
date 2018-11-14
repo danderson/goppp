@@ -1,3 +1,4 @@
+// Package ppp establishes a PPP connection running over PPPoE.
 package ppp
 
 import (
