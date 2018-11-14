@@ -1,0 +1,25 @@
+# -*- mode: yaml -*-
+
+version: 2
+jobs:
+{{- range .GoVersions }}
+  test-{{.}}:
+    working_directory: /go/src/go.universe.tf/goppp
+    docker:
+      - image: circleci/golang:{{.}}
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run: GO111MODULE=on go test -v ./...
+      - run: cd test && docker build -t goppp:testing
+{{- end }}
+workflows:
+  version: 2
+  test:
+    jobs:
+{{- range .GoVersions }}
+      - test-{{.}}:
+          filters:
+            tags:
+              only: /.*/
+{{- end }}
