@@ -10,7 +10,7 @@ jobs:
       - checkout
       - setup_remote_docker
       - run: GO111MODULE=on go test -v ./...
-      - run: cd test && docker build -t goppp:testing
+      - run: cd test && docker build -t goppp:testing .
 workflows:
   version: 2
   test:
