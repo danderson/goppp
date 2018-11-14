@@ -84,7 +84,6 @@ func TestDiscovery(t *testing.T) {
 		t.Fatalf("couldn't start pppd container: %s", err)
 	}
 	defer close()
-	time.Sleep(200 * time.Millisecond)
 
 	pppoeDiscovery("docker0")
 }
