@@ -86,5 +86,5 @@ func TestDiscovery(t *testing.T) {
 	}
 	defer close()
 
-	pppoeDiscovery("docker0")
+	panic("TODO")
 }
