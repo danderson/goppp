@@ -6,7 +6,6 @@ import (
 	"net"
 	"os/exec"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/mdlayher/raw"
@@ -73,18 +72,4 @@ func startServer() (func(), error) {
 	}
 
 	return closeFunc, nil
-}
-
-func TestDiscovery(t *testing.T) {
-	if err := canTest(); err != nil {
-		t.Skipf("can't run privileged tests: %v", err)
-	}
-
-	close, err := startServer()
-	if err != nil {
-		t.Fatalf("couldn't start pppd container: %v", err)
-	}
-	defer close()
-
-	pppoeDiscovery("docker0")
 }
