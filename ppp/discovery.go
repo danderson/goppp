@@ -42,7 +42,7 @@ var (
 	// concentrator.
 	padiPacket = encodeDiscoveryPacket(&discoveryPacket{
 		Code: pppoePADI,
-		TLV: map[int][]byte{
+		Tags: map[int][]byte{
 			// By convention on single-ISP customer access networks,
 			// the tag is always nil, meaning "don't care," because
 			// there's only one ISP around anyway.
@@ -114,7 +114,7 @@ func pppoeDiscovery(ctx context.Context, ifName string) (sessionID int, closer f
 	}
 
 	// Oops, deadline exceeded :(
-	return 0, nil, errors.New("deadline exceeded during PPPoE Discovery")
+	return 0, nil, ctx.Err()
 }
 
 // newDiscoveryConn creates a net.PacketConn that can receive PPPoE
@@ -178,18 +178,18 @@ func parsePADO(buf []byte) (cookie []byte, err error) {
 	// Note, not having a cookie is fine. Its function is similar to
 	// syncookies, an anti-DoS measure at the concentrator. If the
 	// concentrator doesn't care, then neither do we.
-	return pkt.TLV[pppoeTagCookie], nil
+	return pkt.Tags[pppoeTagCookie], nil
 }
 
 func sendPADR(conn net.PacketConn, concentrator net.Addr, cookie []byte) error {
 	pkt := &discoveryPacket{
 		Code: pppoePADR,
-		TLV: map[int][]byte{
+		Tags: map[int][]byte{
 			pppoeTagServiceName: nil,
 		},
 	}
 	if len(cookie) != 0 {
-		pkt.TLV[pppoeTagCookie] = cookie
+		pkt.Tags[pppoeTagCookie] = cookie
 	}
 	_, err := conn.WriteTo(encodeDiscoveryPacket(pkt), concentrator)
 	return err
@@ -245,9 +245,14 @@ func sendPADT(conn net.PacketConn, concentrator net.Addr, sessionID int) error {
 
 // discoveryPacket is a parsed PPPoE Discovery packet.
 type discoveryPacket struct {
-	Code      int
+	// Code is the kind of PPPoE packet.
+	Code int
+	// SessionID is the PPPoE session ID. It's zero for all Discovery
+	// packets except PADS and PADT.
 	SessionID int
-	TLV       map[int][]byte
+	// Tags is a collection of key/value pairs attached to the
+	// packet. Required/optional tags vary depending on Code.
+	Tags map[int][]byte
 }
 
 // parseDiscoveryPacket parses a PPPoE Discovery packet into a discoveryPacket.
@@ -262,7 +267,7 @@ func parseDiscoveryPacket(pkt []byte) (*discoveryPacket, error) {
 	ret := &discoveryPacket{
 		Code:      int(pkt[1]),
 		SessionID: int(binary.BigEndian.Uint16(pkt[2:4])),
-		TLV:       map[int][]byte{},
+		Tags:      map[int][]byte{},
 	}
 
 	tlvLen := int(binary.BigEndian.Uint16(pkt[4:6]))
@@ -288,7 +293,7 @@ func parseDiscoveryPacket(pkt []byte) (*discoveryPacket, error) {
 			return nil, errors.New("unexpected non-nil Service-Name tag")
 		}
 
-		ret.TLV[tagType] = tagValue
+		ret.Tags[tagType] = tagValue
 	}
 
 	return ret, nil
@@ -297,22 +302,20 @@ func parseDiscoveryPacket(pkt []byte) (*discoveryPacket, error) {
 // encodeDiscoveryPacket marshals a PPPoE Discovery packet into raw bytes.
 func encodeDiscoveryPacket(pkt *discoveryPacket) []byte {
 	tlvLen, tlvs := 0, []int{}
-	for tlv, val := range pkt.TLV {
+	for tlv, val := range pkt.Tags {
 		tlvs = append(tlvs, tlv)
 		tlvLen += len(val)
 	}
 	sort.Ints(tlvs)
 
 	var ret bytes.Buffer
-	ret.Write([]byte{
-		0x11,            // Protocol version 1, packet type 1 (both constants)
-		uint8(pkt.Code), // PPPoE packet code
-	})
+	ret.WriteByte(0x11)            // Protocol version 1, packet type 1
+	ret.WriteByte(uint8(pkt.Code)) // PPPoE packet code
 	binary.Write(&ret, binary.BigEndian, uint16(pkt.SessionID))
-	binary.Write(&ret, binary.BigEndian, uint16(tlvLen+(4*len(pkt.TLV))))
+	binary.Write(&ret, binary.BigEndian, uint16(tlvLen+(4*len(pkt.Tags))))
 
 	for _, tlv := range tlvs {
-		val := pkt.TLV[tlv]
+		val := pkt.Tags[tlv]
 		binary.Write(&ret, binary.BigEndian, uint16(tlv))
 		binary.Write(&ret, binary.BigEndian, uint16(len(val)))
 		ret.Write(val)

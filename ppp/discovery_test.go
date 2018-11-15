@@ -42,7 +42,7 @@ func TestParseDiscoveryPacket(t *testing.T) {
 			raw:  []byte{0x11, 7, 0, 0, 0, 4, 1, 1, 0, 0},
 			want: &discoveryPacket{
 				Code: 7,
-				TLV: map[int][]byte{
+				Tags: map[int][]byte{
 					pppoeTagServiceName: []byte{},
 				},
 			},
@@ -52,7 +52,7 @@ func TestParseDiscoveryPacket(t *testing.T) {
 			raw:  []byte{0x11, 7, 0, 0, 0, 11, 1, 1, 0, 0, 1, 4, 0, 3, 'N', 'O', 'M'},
 			want: &discoveryPacket{
 				Code: 7,
-				TLV: map[int][]byte{
+				Tags: map[int][]byte{
 					pppoeTagServiceName: []byte{},
 					pppoeTagCookie:      []byte("NOM"),
 				},
@@ -65,7 +65,7 @@ func TestParseDiscoveryPacket(t *testing.T) {
 			want: &discoveryPacket{
 				Code:      0x65,
 				SessionID: 0x4243,
-				TLV: map[int][]byte{
+				Tags: map[int][]byte{
 					pppoeTagServiceName: []byte{},
 				},
 			},
@@ -82,17 +82,17 @@ func TestParseDiscoveryPacket(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			desc:    "short TLV array length",
+			desc:    "short Tags array length",
 			raw:     []byte{0x11, 7, 0, 0, 0, 2, 1, 1, 0, 0},
 			wantErr: true,
 		},
 		{
-			desc:    "long TLV array length",
+			desc:    "long Tags array length",
 			raw:     []byte{0x11, 7, 0, 0, 200, 200, 1, 1, 0, 0},
 			wantErr: true,
 		},
 		{
-			desc:    "TLV trailing garbage",
+			desc:    "Tags trailing garbage",
 			raw:     []byte{0x11, 7, 0, 0, 0, 5, 1, 1, 0, 0, 0},
 			wantErr: true,
 		},
@@ -102,7 +102,7 @@ func TestParseDiscoveryPacket(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			desc:    "overflowing TLV",
+			desc:    "overflowing Tags",
 			raw:     []byte{0x11, 7, 0, 0, 0, 4, 1, 1, 200, 200},
 			wantErr: true,
 		},
@@ -114,7 +114,7 @@ func TestParseDiscoveryPacket(t *testing.T) {
 			raw:  []byte{0x11, 0x09, 0x00, 0x00, 0x00, 0x04, 0x01, 0x01, 0x00, 0x00},
 			want: &discoveryPacket{
 				Code: 0x09,
-				TLV: map[int][]byte{
+				Tags: map[int][]byte{
 					pppoeTagServiceName: []byte{},
 				},
 			},
@@ -133,7 +133,7 @@ func TestParseDiscoveryPacket(t *testing.T) {
 			want: &discoveryPacket{
 				Code:      0x07,
 				SessionID: 0,
-				TLV: map[int][]byte{
+				Tags: map[int][]byte{
 					pppoeTagServiceName: []byte{},
 					pppoeTagACName:      []byte("tukw-dsl-gw01.tukw.qwest.net"),
 					pppoeTagCookie: []byte{
@@ -142,7 +142,7 @@ func TestParseDiscoveryPacket(t *testing.T) {
 					},
 				},
 			},
-			skipUnparse: true, // Not idempotent due to ordering of TLVs
+			skipUnparse: true, // Not idempotent due to ordering of Tags
 		},
 		{
 			desc: "real isp PADR",
@@ -154,7 +154,7 @@ func TestParseDiscoveryPacket(t *testing.T) {
 			want: &discoveryPacket{
 				Code:      0x19,
 				SessionID: 0,
-				TLV: map[int][]byte{
+				Tags: map[int][]byte{
 					pppoeTagServiceName: []byte{},
 					pppoeTagCookie: []byte{
 						0x64, 0xb1, 0x40, 0x19, 0xe3, 0x6e, 0x03, 0xb6,
@@ -177,7 +177,7 @@ func TestParseDiscoveryPacket(t *testing.T) {
 			want: &discoveryPacket{
 				Code:      0x65,
 				SessionID: 0x01eb,
-				TLV: map[int][]byte{
+				Tags: map[int][]byte{
 					pppoeTagServiceName: []byte{},
 					pppoeTagACName:      []byte("tukw-dsl-gw01.tukw.qwest.net"),
 					pppoeTagCookie: []byte{
