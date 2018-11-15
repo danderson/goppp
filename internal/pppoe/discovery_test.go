@@ -1,4 +1,4 @@
-package ppp
+package pppoe
 
 import (
 	"context"
@@ -6,14 +6,16 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+
+	"go.universe.tf/ppp/internal/testutil"
 )
 
 func TestDiscovery(t *testing.T) {
-	if err := canTest(); err != nil {
+	if err := testutil.CheckPrivilegeForContainerTests(); err != nil {
 		t.Skipf("can't run privileged tests: %v", err)
 	}
 
-	close, err := startServer()
+	close, err := testutil.StartServer()
 	if err != nil {
 		t.Fatalf("couldn't start pppd container: %v", err)
 	}

@@ -1,5 +1,5 @@
-// package ppp implements establishing a PPP connection running over PPPoE.
-package ppp
+// Package testutil contains some helpers for testing PPP and PPPoE connections.
+package testutil
 
 import (
 	"fmt"
@@ -21,7 +21,7 @@ func canUseRawSockets() error {
 	if err != nil {
 		return fmt.Errorf("getting interface: %v", err)
 	}
-	conn, err := raw.ListenPacket(intf, protoPPPoEDiscovery, &raw.Config{LinuxSockDGRAM: true})
+	conn, err := raw.ListenPacket(intf, 0x8863, &raw.Config{LinuxSockDGRAM: true})
 	if err != nil {
 		return fmt.Errorf("creating PPPoE Discovery listener: %v", err)
 	}
@@ -29,7 +29,8 @@ func canUseRawSockets() error {
 	return nil
 }
 
-func canTest() error {
+// CheckPrivilegeForContainerTests returns nil if Docker and raw socket based tests can be run.
+func CheckPrivilegeForContainerTests() error {
 	if err := canUseRawSockets(); err != nil {
 		return err
 	}
@@ -39,7 +40,10 @@ func canTest() error {
 	return nil
 }
 
-func startServer() (func(), error) {
+// StartServer runs a PPP+PPPoE server in a Docker container. It
+// returns a closer function (which should be defer-ed), or an error
+// if server startup fails.
+func StartServer() (func(), error) {
 	if err := canUseDocker(); err != nil {
 		return nil, fmt.Errorf("can't run docker: %v", err)
 	}
