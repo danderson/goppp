@@ -11,7 +11,7 @@ import (
 )
 
 func TestDiscovery(t *testing.T) {
-	if err := testutil.CanRunPrivilegedTests(); err != nil {
+	if err := testutil.CheckPrivilegeForContainerTests(); err != nil {
 		t.Skipf("can't run privileged tests: %v", err)
 	}
 

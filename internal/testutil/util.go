@@ -1,4 +1,4 @@
-// package testutil contains some helpers for testing PPP and PPPoE connections.
+// Package testutil contains some helpers for testing PPP and PPPoE connections.
 package testutil
 
 import (
@@ -29,8 +29,8 @@ func canUseRawSockets() error {
 	return nil
 }
 
-// CanRunPrivilegedTests returns nil if Docker and raw socket based tests can be run.
-func CanRunPrivilegedTests() error {
+// CheckPrivilegeForContainerTests returns nil if Docker and raw socket based tests can be run.
+func CheckPrivilegeForContainerTests() error {
 	if err := canUseRawSockets(); err != nil {
 		return err
 	}
@@ -40,9 +40,9 @@ func CanRunPrivilegedTests() error {
 	return nil
 }
 
-// StartServer runs a PPP+PPPoE server in a Docker container. Returns
-// a closer function (which should be defer-ed), or an error if server
-// startup fails.
+// StartServer runs a PPP+PPPoE server in a Docker container. It
+// returns a closer function (which should be defer-ed), or an error
+// if server startup fails.
 func StartServer() (func(), error) {
 	if err := canUseDocker(); err != nil {
 		return nil, fmt.Errorf("can't run docker: %v", err)
