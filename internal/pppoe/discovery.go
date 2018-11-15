@@ -1,5 +1,5 @@
-// Package ppp establishes a PPP connection running over PPPoE.
-package ppp
+// Package pppoe creates a PPPoE session with a remote server.
+package pppoe
 
 import (
 	"bytes"
