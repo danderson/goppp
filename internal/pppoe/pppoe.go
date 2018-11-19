@@ -35,6 +35,9 @@ type Conn struct {
 	// during session teardown, but mostly it's there to provide if
 	// someone asks for Conn.RemoteAddr().
 	addr Addr
+	// closed is a tombstone for closed Conns, so that double-closes
+	// are safe.
+	closed bool
 }
 
 // New creates a PPPoE Conn on the given interface.
@@ -95,6 +98,11 @@ func (c *Conn) RemoteAddr() net.Addr {
 
 // Close closes the PPPoE session.
 func (c *Conn) Close() error {
+	if c.closed {
+		return nil
+	}
+
+	c.closed = true
 	sessErr := closeSessionFd(c.sessionFd)
 	padtErr := sendPADT(c.discovery, c.addr.ConcentratorAddr, c.addr.SessionID)
 	discErr := c.discovery.Close()
