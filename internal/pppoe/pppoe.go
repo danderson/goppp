@@ -38,16 +38,11 @@ type Conn struct {
 }
 
 // New creates a PPPoE Conn on the given interface.
-func New(ctx context.Context, ifName string) (ret *Conn, err error) {
+func New(ctx context.Context, ifName string) (*Conn, error) {
 	disco, err := newDiscoveryConn(ifName)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if err != nil {
-			disco.Close()
-		}
-	}()
 
 	// Create the session file descriptor before executing PPPoE
 	// discovery, because the concentrator will immediately start
@@ -55,26 +50,26 @@ func New(ctx context.Context, ifName string) (ret *Conn, err error) {
 	// catch those packets.
 	sessionFd, err := newSessionFd(ifName)
 	if err != nil {
+		disco.Close()
 		return nil, err
 	}
-	defer func() {
-		if err != nil {
-			closeSessionFd(sessionFd)
-		}
-	}()
 
 	concentratorAddr, sessionID, err := pppoeDiscovery(ctx, disco)
 	if err != nil {
+		closeSessionFd(sessionFd)
+		disco.Close()
 		return nil, err
 	}
 
 	// Connect the session fd. This doesn't do much, other than allow
 	// a few more ioctl()s to be applied later on.
 	if err = connectSessionFd(sessionFd, ifName, concentratorAddr, sessionID); err != nil {
+		closeSessionFd(sessionFd)
+		disco.Close()
 		return nil, err
 	}
 
-	ret = &Conn{
+	return &Conn{
 		sessionFd: sessionFd,
 		discovery: disco,
 		addr: Addr{
@@ -82,8 +77,7 @@ func New(ctx context.Context, ifName string) (ret *Conn, err error) {
 			SessionID:        sessionID,
 			ConcentratorAddr: concentratorAddr,
 		},
-	}
-	return ret, nil
+	}, nil
 }
 
 // LocalAddr returns nil. PPPoE Conns don't have an interesting local
