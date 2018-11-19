@@ -12,7 +12,7 @@ type Addr struct {
 	// PPPoE session is running.
 	Interface string
 	// SessionID is the session identifier for the PPPoE session.
-	SessionID int
+	SessionID uint16
 	// ConcentratorAddr is the Ethernet address of the remote PPPoE concentrator.
 	ConcentratorAddr net.HardwareAddr
 }

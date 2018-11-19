@@ -17,9 +17,9 @@ func closeSessionFd(fd int) error {
 	return unix.Close(fd)
 }
 
-func connectSessionFd(fd int, ifName string, remote net.HardwareAddr, sessionID int) error {
+func connectSessionFd(fd int, ifName string, remote net.HardwareAddr, sessionID uint16) error {
 	sa := &unix.SockaddrPPPoE{
-		SID:    uint16(sessionID),
+		SID:    sessionID,
 		Remote: remote,
 		Dev:    ifName,
 	}

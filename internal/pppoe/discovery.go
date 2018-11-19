@@ -55,7 +55,7 @@ var (
 )
 
 // pppoeDiscovery executes PPPoE discovery and returns a PPPoE session ID.
-func pppoeDiscovery(ctx context.Context, conn net.PacketConn) (concentrator net.HardwareAddr, sessionID int, err error) {
+func pppoeDiscovery(ctx context.Context, conn net.PacketConn) (concentrator net.HardwareAddr, sessionID uint16, err error) {
 	deadline, hasDeadline := ctx.Deadline()
 
 	var (
@@ -186,7 +186,7 @@ func sendPADR(conn net.PacketConn, concentrator net.Addr, cookie []byte) error {
 	return err
 }
 
-func readPADS(ctx context.Context, conn net.PacketConn, concentrator net.Addr) (sessionID int, err error) {
+func readPADS(ctx context.Context, conn net.PacketConn, concentrator net.Addr) (sessionID uint16, err error) {
 	var b [1500]byte
 
 	if deadline, ok := ctx.Deadline(); ok {
@@ -213,7 +213,7 @@ func readPADS(ctx context.Context, conn net.PacketConn, concentrator net.Addr) (
 	}
 }
 
-func parsePADS(buf []byte) (sessionID int, err error) {
+func parsePADS(buf []byte) (sessionID uint16, err error) {
 	pkt, err := parseDiscoveryPacket(buf)
 	if err != nil {
 		return 0, err
@@ -224,7 +224,7 @@ func parsePADS(buf []byte) (sessionID int, err error) {
 	return pkt.SessionID, nil
 }
 
-func sendPADT(conn net.PacketConn, concentrator net.HardwareAddr, sessionID int) error {
+func sendPADT(conn net.PacketConn, concentrator net.HardwareAddr, sessionID uint16) error {
 	pkt := &discoveryPacket{
 		Code:      pppoePADT,
 		SessionID: sessionID,
@@ -240,7 +240,7 @@ type discoveryPacket struct {
 	Code int
 	// SessionID is the PPPoE session ID. It's zero for all Discovery
 	// packets except PADS and PADT.
-	SessionID int
+	SessionID uint16
 	// Tags is a collection of key/value pairs attached to the
 	// packet. Required/optional tags vary depending on Code.
 	Tags map[int][]byte
@@ -257,7 +257,7 @@ func parseDiscoveryPacket(pkt []byte) (*discoveryPacket, error) {
 
 	ret := &discoveryPacket{
 		Code:      int(pkt[1]),
-		SessionID: int(binary.BigEndian.Uint16(pkt[2:4])),
+		SessionID: binary.BigEndian.Uint16(pkt[2:4]),
 		Tags:      map[int][]byte{},
 	}
 
