@@ -126,12 +126,10 @@ func (c *Conn) Close() error {
 }
 
 func (c *Conn) Read(b []byte) (int, error) {
-	n, _, err := readSessionPacket(c.sessionFd, b, c.readDeadline)
-	return n, err
+	return readSessionPacket(c.sessionFd, b, c.readDeadline)
 }
 
 func (c *Conn) Write(b []byte) (int, error) {
-	// TODO: deadline
 	return sendSessionPacket(c.sessionFd, b, c.writeDeadline)
 }
 

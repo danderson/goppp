@@ -50,10 +50,10 @@ func sendSessionPacket(fd int, pkt []byte, deadline time.Time) (n int, err error
 	return n, nil
 }
 
-func readSessionPacket(fd int, buf []byte, deadline time.Time) (n int, from unix.Sockaddr, err error) {
+func readSessionPacket(fd int, buf []byte, deadline time.Time) (n int, err error) {
 	if !deadline.IsZero() {
 		if err = setTimeout(fd, unix.SO_RCVTIMEO, deadline); err != nil {
-			return 0, nil, err
+			return 0, err
 		}
 		defer func() {
 			resetErr := setTimeout(fd, unix.SO_RCVTIMEO, time.Time{})
@@ -62,7 +62,7 @@ func readSessionPacket(fd int, buf []byte, deadline time.Time) (n int, from unix
 			}
 		}()
 	}
-	return unix.Recvfrom(fd, buf, 0)
+	return unix.Read(fd, buf)
 }
 
 func setTimeout(fd int, opt int, deadline time.Time) error {
