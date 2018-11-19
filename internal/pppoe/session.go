@@ -75,5 +75,5 @@ func setTimeout(fd int, opt int, deadline time.Time) error {
 		tv.Sec = int64(d.Seconds())
 		tv.Usec = (d.Nanoseconds() / 1e3) - (tv.Sec * 1e6)
 	}
-	return unix.SetsockoptTimeval(fd, unix.SOL_SOCKET, unix.SO_RCVTIMEO, &tv)
+	return unix.SetsockoptTimeval(fd, unix.SOL_SOCKET, opt, &tv)
 }
