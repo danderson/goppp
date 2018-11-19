@@ -80,8 +80,9 @@ func New(ctx context.Context, ifName string) (*Conn, error) {
 	}, nil
 }
 
-// LocalAddr returns nil. PPPoE Conns don't have an interesting local
-// address to share.
+// LocalAddr returns the local address of the PPPoE connection. PPPoE
+// Conns don't have an interesting local address to share, so this
+// returns nil for now.
 func (c *Conn) LocalAddr() net.Addr {
 	return nil
 }
