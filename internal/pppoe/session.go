@@ -1,9 +1,10 @@
 package pppoe
 
 import (
-	"fmt"
 	"net"
-	"time"
+	"os"
+	"runtime"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -27,52 +28,36 @@ func connectSessionFd(fd int, ifName string, remote net.HardwareAddr, sessionID 
 	return unix.Connect(fd, sa)
 }
 
-func sendSessionPacket(fd int, pkt []byte, deadline time.Time) (n int, err error) {
-	if !deadline.IsZero() {
-		if err = setTimeout(fd, unix.SO_SNDTIMEO, deadline); err != nil {
-			return 0, err
-		}
-		defer func() {
-			resetErr := setTimeout(fd, unix.SO_SNDTIMEO, time.Time{})
-			if err == nil && resetErr != nil {
-				err = resetErr
-			}
-		}()
-	}
-	n, err = unix.Write(fd, pkt)
+func newChannel(sessionFd int) (*os.File, error) {
+	f, err := os.OpenFile("/dev/ppp", os.O_RDWR, 0600)
 	if err != nil {
-		return n, err
+		return nil, err
 	}
-	if n != len(pkt) {
-		return n, fmt.Errorf("short socket write: got %d, want %d", n, len(pkt))
-	}
-	return n, nil
-}
 
-func readSessionPacket(fd int, buf []byte, deadline time.Time) (n int, err error) {
-	if !deadline.IsZero() {
-		if err = setTimeout(fd, unix.SO_RCVTIMEO, deadline); err != nil {
-			return 0, err
-		}
-		defer func() {
-			resetErr := setTimeout(fd, unix.SO_RCVTIMEO, time.Time{})
-			if err == nil && resetErr != nil {
-				err = resetErr
-			}
-		}()
+	channelID, err := unix.IoctlGetInt(sessionFd, unix.PPPIOCGCHAN)
+	if err != nil {
+		f.Close()
+		return nil, err
 	}
-	return unix.Read(fd, buf)
-}
 
-func setTimeout(fd int, opt int, deadline time.Time) error {
-	var tv unix.Timeval
-	if !deadline.IsZero() {
-		d := time.Until(deadline).Truncate(time.Microsecond)
-		if d < 0 {
-			return pppoeError{msg: "timed out", timeout: true}
-		}
-		tv.Sec = int64(d.Seconds())
-		tv.Usec = (d.Nanoseconds() / 1e3) - (tv.Sec * 1e6)
+	// At this point sessionFd is kinda horked, because reading the
+	// channel ID switches the channel to the BOUND state, where it
+	// will only talk to the ppp generic driver. So, we need to bind
+	// that channel to the /dev/ppp File we just opened.
+
+	if err := unix.IoctlSetInt(int(f.Fd()), unix.PPPIOCATTCHAN, int(uintptr(unsafe.Pointer(&channelID)))); err != nil {
+		f.Close()
+		return nil, err
 	}
-	return unix.SetsockoptTimeval(fd, unix.SOL_SOCKET, opt, &tv)
+	// We're passing a pointer to the channelID int into the
+	// kernel. It needs to stay alive until the syscall
+	// completes. This is what runtime.Keepalive does.
+	//
+	// In theory it's overkill because channelID is on the stack
+	// frame, but who knows, the compiler might decide to put it on
+	// the heap for some reason. Worst case, it does nothing, but it's
+	// not actively harmful, so it's fine.
+	runtime.KeepAlive(&channelID)
+
+	return f, nil
 }

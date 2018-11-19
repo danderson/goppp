@@ -2,6 +2,7 @@ package pppoe
 
 import (
 	"context"
+	"encoding/binary"
 	"testing"
 	"time"
 
@@ -28,5 +29,33 @@ func TestNew(t *testing.T) {
 	}
 	defer conn.Close()
 
-	// TODO: test drive the session by sending some packets.
+	lcpHello := []byte{
+		0xc0, 0x21, // PPP protocol: LCP
+		1,    // Configure-Request
+		1,    // Request ID
+		0, 0, // Length of tags
+	}
+	if _, err := conn.Write(lcpHello); err != nil {
+		t.Fatalf("writing to PPPoE session: %v", err)
+	}
+
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("setting read deadline: %v", err)
+	}
+
+	// Read back and just check that the frame we read is a PPP LCP
+	// packet. The server could be sending us a couple of different
+	// ones, so we just check that it looks plausible.
+	var b [1500]byte
+	n, err := conn.Read(b[:])
+	if err != nil {
+		t.Fatalf("reading from PPPoE session: %v", err)
+	}
+	if n < 2 {
+		t.Fatal("impossibly short PPPoE session packet")
+	}
+	proto := binary.BigEndian.Uint16(b[:2])
+	if proto != 0xc021 {
+		t.Fatalf("wrong PPP protocol, got %4x, want c021", proto)
+	}
 }
