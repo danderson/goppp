@@ -1,7 +1,6 @@
 package pppoe
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -70,7 +69,7 @@ func setTimeout(fd int, opt int, deadline time.Time) error {
 	if !deadline.IsZero() {
 		d := time.Until(deadline).Truncate(time.Microsecond)
 		if d < 0 {
-			return errors.New("timeout") // TODO: net.Error
+			return pppoeError{msg: "timed out", timeout: true}
 		}
 		tv.Sec = int64(d.Seconds())
 		tv.Usec = (d.Nanoseconds() / 1e3) - (tv.Sec * 1e6)

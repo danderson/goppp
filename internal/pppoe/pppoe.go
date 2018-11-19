@@ -125,26 +125,49 @@ func (c *Conn) Close() error {
 	return nil
 }
 
+// Read reads a packet from the PPPoE session.
 func (c *Conn) Read(b []byte) (int, error) {
 	return readSessionPacket(c.sessionFd, b, c.readDeadline)
 }
 
+// Write writes a packet to the PPPoE session.
 func (c *Conn) Write(b []byte) (int, error) {
 	return sendSessionPacket(c.sessionFd, b, c.writeDeadline)
 }
 
+// SetDeadline sets both the read and write deadlines for future Read
+// and Write operations. Note that it does not alter the deadline of
+// currently in-flight read/write operations, unlike fully conforming
+// net.Conn implementations.
 func (c *Conn) SetDeadline(deadline time.Time) error {
+	// TODO: if we ever care in the future, make this function and the
+	// following ones conforming, somehow?
 	c.readDeadline = deadline
 	c.writeDeadline = deadline
 	return nil
 }
 
+// SetReadDeadline sets the deadline for future Read operations. Note
+// that it does not alter the deadline of currently in-flight read
+// operations, unlike fully conforming net.Conn implementations.
 func (c *Conn) SetReadDeadline(deadline time.Time) error {
 	c.readDeadline = deadline
 	return nil
 }
 
+// SetWriteDeadline sets the deadline for future Write operations. Note
+// that it does not alter the deadline of currently in-flight write
+// operations, unlike fully conforming net.Conn implementations.
 func (c *Conn) SetWriteDeadline(deadline time.Time) error {
 	c.writeDeadline = deadline
 	return nil
 }
+
+type pppoeError struct {
+	msg     string
+	timeout bool
+}
+
+func (e pppoeError) Error() string   { return e.msg }
+func (e pppoeError) Temporary() bool { return true }
+func (e pppoeError) Timeout() bool   { return e.timeout }
