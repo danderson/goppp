@@ -1,37 +1,12 @@
 package pppoe
 
 import (
-	"context"
 	"testing"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
-
-	"go.universe.tf/ppp/internal/testutil"
 )
 
-func TestDiscovery(t *testing.T) {
-	if err := testutil.CheckPrivilegeForContainerTests(); err != nil {
-		t.Skipf("can't run privileged tests: %v", err)
-	}
-
-	close, err := testutil.StartServer()
-	if err != nil {
-		t.Fatalf("couldn't start pppd container: %v", err)
-	}
-	defer close()
-
-	ctx, done := context.WithTimeout(context.Background(), 5*time.Second)
-	defer done()
-
-	_, sendPADT, err := pppoeDiscovery(ctx, "docker0")
-	if err != nil {
-		t.Fatalf("PPPoE discovery failed: %v", err)
-	}
-	defer sendPADT()
-}
-
-func TestParseDiscoveryPacket(t *testing.T) {
+func TestParseDiscovery(t *testing.T) {
 	tests := []struct {
 		desc        string
 		raw         []byte

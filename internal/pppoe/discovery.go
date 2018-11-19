@@ -1,4 +1,3 @@
-// Package pppoe creates a PPPoE session with a remote server.
 package pppoe
 
 import (
@@ -56,65 +55,57 @@ var (
 )
 
 // pppoeDiscovery executes PPPoE discovery and returns a PPPoE session ID.
-func pppoeDiscovery(ctx context.Context, ifName string) (sessionID int, closer func() error, err error) {
-	conn, err := newDiscoveryConn(ifName)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer func() {
-		if err != nil {
-			conn.Close()
-		}
-	}()
-
+func pppoeDiscovery(ctx context.Context, conn net.PacketConn) (concentrator net.HardwareAddr, sessionID uint16, err error) {
 	deadline, hasDeadline := ctx.Deadline()
 
 	var (
-		concentrator net.Addr
-		cookie       []byte
+		from   net.Addr
+		cookie []byte
 	)
 
 	// Broadcast PADIs, looking for a PPPoE concentrator.
 	for concentrator == nil && (!hasDeadline || time.Now().Before(deadline)) {
 		// Send a PADI, asking concentrators for a session offer.
 		if err := sendPADI(conn); err != nil {
-			return 0, nil, fmt.Errorf("sending PADI packet: %v", err)
+			return nil, 0, fmt.Errorf("sending PADI packet: %v", err)
 		}
 
 		padoCtx, cancelPADO := context.WithTimeout(ctx, time.Second)
 		defer cancelPADO()
-		concentrator, cookie, err = readPADO(padoCtx, conn)
+		from, cookie, err = readPADO(padoCtx, conn)
 		if err == nil {
 			// We know about a concentrator, move on.
 			break
 		} else if neterr, ok := err.(net.Error); !ok || !neterr.Timeout() {
-			return 0, nil, fmt.Errorf("waiting for PADO: %v", err)
+			return nil, 0, fmt.Errorf("waiting for PADO: %v", err)
 		}
 		// Timed out waiting for PADO. Loop back around to (maybe) try
 		// again.
 	}
 
+	concentrator = from.(*raw.Addr).HardwareAddr
+
 	// Got a concentrator, request a session.
 	for !hasDeadline || time.Now().Before(deadline) {
-		if err := sendPADR(conn, concentrator, cookie); err != nil {
-			return 0, nil, fmt.Errorf("sending PADR packet: %v", err)
+		if err := sendPADR(conn, from, cookie); err != nil {
+			return nil, 0, fmt.Errorf("sending PADR packet: %v", err)
 		}
 
 		padsCtx, cancelPADS := context.WithTimeout(ctx, time.Second)
 		defer cancelPADS()
-		sessionID, err = readPADS(padsCtx, conn, concentrator)
+		sessionID, err = readPADS(padsCtx, conn, from)
 		if err == nil {
 			// We're done!
-			return sessionID, func() error { return sendPADT(conn, concentrator, sessionID) }, nil
+			return concentrator, sessionID, nil
 		} else if neterr, ok := err.(net.Error); !ok || !neterr.Timeout() {
-			return 0, nil, fmt.Errorf("waiting for PADS: %v", err)
+			return nil, 0, fmt.Errorf("waiting for PADS: %v", err)
 		}
 		// Timed out waiting for PADS. Loop back around to (maybe) try
 		// again.
 	}
 
 	// Oops, deadline exceeded :(
-	return 0, nil, ctx.Err()
+	return nil, 0, ctx.Err()
 }
 
 // newDiscoveryConn creates a net.PacketConn that can receive PPPoE
@@ -195,7 +186,7 @@ func sendPADR(conn net.PacketConn, concentrator net.Addr, cookie []byte) error {
 	return err
 }
 
-func readPADS(ctx context.Context, conn net.PacketConn, concentrator net.Addr) (sessionID int, err error) {
+func readPADS(ctx context.Context, conn net.PacketConn, concentrator net.Addr) (sessionID uint16, err error) {
 	var b [1500]byte
 
 	if deadline, ok := ctx.Deadline(); ok {
@@ -222,7 +213,7 @@ func readPADS(ctx context.Context, conn net.PacketConn, concentrator net.Addr) (
 	}
 }
 
-func parsePADS(buf []byte) (sessionID int, err error) {
+func parsePADS(buf []byte) (sessionID uint16, err error) {
 	pkt, err := parseDiscoveryPacket(buf)
 	if err != nil {
 		return 0, err
@@ -233,12 +224,12 @@ func parsePADS(buf []byte) (sessionID int, err error) {
 	return pkt.SessionID, nil
 }
 
-func sendPADT(conn net.PacketConn, concentrator net.Addr, sessionID int) error {
+func sendPADT(conn net.PacketConn, concentrator net.HardwareAddr, sessionID uint16) error {
 	pkt := &discoveryPacket{
 		Code:      pppoePADT,
 		SessionID: sessionID,
 	}
-	_, err := conn.WriteTo(encodeDiscoveryPacket(pkt), concentrator)
+	_, err := conn.WriteTo(encodeDiscoveryPacket(pkt), &raw.Addr{concentrator})
 	conn.Close()
 	return err
 }
@@ -249,7 +240,7 @@ type discoveryPacket struct {
 	Code int
 	// SessionID is the PPPoE session ID. It's zero for all Discovery
 	// packets except PADS and PADT.
-	SessionID int
+	SessionID uint16
 	// Tags is a collection of key/value pairs attached to the
 	// packet. Required/optional tags vary depending on Code.
 	Tags map[int][]byte
@@ -266,7 +257,7 @@ func parseDiscoveryPacket(pkt []byte) (*discoveryPacket, error) {
 
 	ret := &discoveryPacket{
 		Code:      int(pkt[1]),
-		SessionID: int(binary.BigEndian.Uint16(pkt[2:4])),
+		SessionID: binary.BigEndian.Uint16(pkt[2:4]),
 		Tags:      map[int][]byte{},
 	}
 
