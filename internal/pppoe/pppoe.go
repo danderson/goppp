@@ -4,6 +4,7 @@ package pppoe
 import (
 	"context"
 	"net"
+	"time"
 )
 
 // Addr is a PPPoE peer address.
@@ -38,6 +39,12 @@ type Conn struct {
 	// closed is a tombstone for closed Conns, so that double-closes
 	// are safe.
 	closed bool
+	// readDeadline is the requested deadline for reads from the
+	// session socket.
+	readDeadline time.Time
+	// writeDeadline is the requested deadline for writes to the
+	// session socket.
+	writeDeadline time.Time
 }
 
 // New creates a PPPoE Conn on the given interface.
@@ -115,5 +122,31 @@ func (c *Conn) Close() error {
 	if discErr != nil {
 		return discErr
 	}
+	return nil
+}
+
+func (c *Conn) Read(b []byte) (int, error) {
+	n, _, err := readSessionPacket(c.sessionFd, b, c.readDeadline)
+	return n, err
+}
+
+func (c *Conn) Write(b []byte) (int, error) {
+	// TODO: deadline
+	return sendSessionPacket(c.sessionFd, b, c.writeDeadline)
+}
+
+func (c *Conn) SetDeadline(deadline time.Time) error {
+	c.readDeadline = deadline
+	c.writeDeadline = deadline
+	return nil
+}
+
+func (c *Conn) SetReadDeadline(deadline time.Time) error {
+	c.readDeadline = deadline
+	return nil
+}
+
+func (c *Conn) SetWriteDeadline(deadline time.Time) error {
+	c.writeDeadline = deadline
 	return nil
 }
