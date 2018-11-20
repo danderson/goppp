@@ -44,8 +44,7 @@ func newChannel(sessionFd int) (*os.File, error) {
 	// channel ID switches the channel to the BOUND state, where it
 	// will only talk to the ppp generic driver. So, we need to bind
 	// that channel to the /dev/ppp File we just opened.
-
-	if err := unix.IoctlSetInt(int(f.Fd()), unix.PPPIOCATTCHAN, int(uintptr(unsafe.Pointer(&channelID)))); err != nil {
+	if err := unix.IoctlSetPointer(int(f.Fd()), unix.PPPIOCATTCHAN, unsafe.Pointer(&channelID)); err != nil {
 		f.Close()
 		return nil, err
 	}
