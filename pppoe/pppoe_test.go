@@ -46,7 +46,7 @@ func TestNew(t *testing.T) {
 	// Read back and just check that the frame we read is a PPP LCP
 	// packet. The server could be sending us a couple of different
 	// ones, so we just check that it looks plausible.
-	var b [1500]byte
+	var b [pppoeBufferLen]byte
 	n, err := conn.Read(b[:])
 	if err != nil {
 		t.Fatalf("reading from PPPoE session: %v", err)

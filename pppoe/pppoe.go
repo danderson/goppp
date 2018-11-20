@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -45,6 +46,8 @@ type Conn struct {
 	// use it during session teardown, but mostly it exists to provide
 	// if someone asks for RemoteAddr.
 	remoteAddr *Addr
+
+	closedMu sync.Mutex
 	// closed is a tombstone for closed Conns, so that double-closes
 	// are safe.
 	closed bool
@@ -99,7 +102,7 @@ func New(ctx context.Context, ifName string) (*Conn, error) {
 		return nil, err
 	}
 
-	return &Conn{
+	ret := &Conn{
 		sessionFd: sessionFd,
 		channel:   f,
 		discovery: disco,
@@ -113,7 +116,25 @@ func New(ctx context.Context, ifName string) (*Conn, error) {
 			SessionID:    sessionID,
 			HardwareAddr: concentratorAddr,
 		},
-	}, nil
+	}
+	go ret.closeOnPADT()
+
+	return ret, nil
+}
+
+func (c *Conn) closeOnPADT() {
+	// No matter why we exit this goroutine, we tear down PPPoE and
+	// everything tied to it on the way out.
+	defer c.Close()
+
+	// Discard the error. We can't usefully propagate it from here,
+	// and in practice the only errors we would get relate to
+	// c.discovery getting closed by another goroutine - in which case
+	// our course of action is still "tear everything down".
+	//
+	// TODO: consider having a way to propagate the error into a log
+	// anyway, just in case it's interesting?
+	readPADT(c.discovery, c.remoteAddr.HardwareAddr, c.remoteAddr.SessionID)
 }
 
 // LocalAddr returns the local address of the PPPoE connection. PPPoE
@@ -131,11 +152,16 @@ func (c *Conn) RemoteAddr() net.Addr {
 
 // Close closes the PPPoE session.
 func (c *Conn) Close() error {
+	c.closedMu.Lock()
+	defer c.closedMu.Unlock()
 	if c.closed {
 		return nil
 	}
 
 	c.closed = true
+	// Read, Write and deadline ops all pass through to c.channel,
+	// which is an os.File that will behave cleanly when closed. So,
+	// we can just close asynchronously here.
 	channelErr := c.channel.Close()
 	sessErr := closeSessionFd(c.sessionFd)
 	padtErr := sendPADT(c.discovery, c.remoteAddr.HardwareAddr, c.remoteAddr.SessionID)
