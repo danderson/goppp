@@ -3,6 +3,7 @@ package pppoe // import "go.universe.tf/ppp/pppoe"
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"time"
@@ -15,12 +16,12 @@ type Addr struct {
 	Interface string
 	// SessionID is the session identifier for the PPPoE session.
 	SessionID uint16
-	// ConcentratorAddr is the Ethernet address of the remote PPPoE concentrator.
-	ConcentratorAddr net.HardwareAddr
+	// HardwareAddr is the Ethernet address of the PPPoE endpoint.
+	HardwareAddr net.HardwareAddr
 }
 
 func (a *Addr) Network() string { return "pppoe" }
-func (a *Addr) String() string  { return a.ConcentratorAddr.String() }
+func (a *Addr) String() string  { return a.HardwareAddr.String() }
 
 // Conn is a PPPoE connection.
 type Conn struct {
@@ -37,17 +38,29 @@ type Conn struct {
 	// PPPoE discovery protocol. We use this to set up a session, and
 	// to tear it down when we close the Conn.
 	discovery net.PacketConn
-	// addr is the address of the remote PPPoE concentrator. We use it
-	// during session teardown, but mostly it's there to provide if
-	// someone asks for Conn.RemoteAddr().
-	addr Addr
+	// localAddr is the address of the local PPPoE endpoint. It exists
+	// to provide in response to LocalAddr.
+	localAddr *Addr
+	// remoteAddr is the address of the remote PPPoE concentrator. We
+	// use it during session teardown, but mostly it exists to provide
+	// if someone asks for RemoteAddr.
+	remoteAddr *Addr
 	// closed is a tombstone for closed Conns, so that double-closes
 	// are safe.
 	closed bool
 }
 
-// New creates a PPPoE Conn on the given interface.
+// New runs PPPoE discovery on the given interface, and creates a Conn
+// that can send PPP frames on the resulting PPPoE session.
 func New(ctx context.Context, ifName string) (*Conn, error) {
+	intf, err := net.InterfaceByName(ifName)
+	if err != nil {
+		return nil, err
+	}
+	if len(intf.HardwareAddr) != 6 {
+		return nil, fmt.Errorf("%q has a non-ethernet hardware type", ifName)
+	}
+
 	disco, err := newDiscoveryConn(ifName)
 	if err != nil {
 		return nil, err
@@ -90,10 +103,15 @@ func New(ctx context.Context, ifName string) (*Conn, error) {
 		sessionFd: sessionFd,
 		channel:   f,
 		discovery: disco,
-		addr: Addr{
-			Interface:        ifName,
-			SessionID:        sessionID,
-			ConcentratorAddr: concentratorAddr,
+		localAddr: &Addr{
+			Interface:    ifName,
+			SessionID:    sessionID,
+			HardwareAddr: intf.HardwareAddr,
+		},
+		remoteAddr: &Addr{
+			Interface:    ifName,
+			SessionID:    sessionID,
+			HardwareAddr: concentratorAddr,
 		},
 	}, nil
 }
@@ -102,13 +120,13 @@ func New(ctx context.Context, ifName string) (*Conn, error) {
 // Conns don't have an interesting local address to share, so this
 // returns nil for now.
 func (c *Conn) LocalAddr() net.Addr {
-	return nil
+	return c.localAddr
 }
 
 // RemoteAddr returns the address of the connected PPPoE concentrator,
 // as an *Addr.
 func (c *Conn) RemoteAddr() net.Addr {
-	return &c.addr
+	return c.remoteAddr
 }
 
 // Close closes the PPPoE session.
@@ -120,7 +138,7 @@ func (c *Conn) Close() error {
 	c.closed = true
 	channelErr := c.channel.Close()
 	sessErr := closeSessionFd(c.sessionFd)
-	padtErr := sendPADT(c.discovery, c.addr.ConcentratorAddr, c.addr.SessionID)
+	padtErr := sendPADT(c.discovery, c.remoteAddr.HardwareAddr, c.remoteAddr.SessionID)
 	discErr := c.discovery.Close()
 	if channelErr != nil {
 		return channelErr
