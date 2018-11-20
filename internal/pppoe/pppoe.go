@@ -4,6 +4,7 @@ package pppoe
 import (
 	"context"
 	"net"
+	"os"
 	"time"
 )
 
@@ -23,11 +24,15 @@ func (a *Addr) String() string  { return a.ConcentratorAddr.String() }
 
 // Conn is a PPPoE connection.
 type Conn struct {
-	// session is both the PPPoE framer/deframer kernel object, and a
-	// socket that lets you read/write packets into that
-	// framer. Mostly we only want this so we can bind it to a PPP
-	// interface later.
+	// session is the PPPoE framer/deframer kernel object. We need to
+	// keep this open to keep the kernel object alive, but we don't
+	// talk to it through this fd. For talking, see the next fd.
 	sessionFd int
+	// channel is the PPP channel that sends over PPPoE. This is a
+	// handle to the generic PPP channel object in the kernel that
+	// wraps the above PPPoE session object. We can use this to
+	// send/receive control packets.
+	channel *os.File
 	// discovery is a raw ethernet PacketConn that we use to speak the
 	// PPPoE discovery protocol. We use this to set up a session, and
 	// to tear it down when we close the Conn.
@@ -39,12 +44,6 @@ type Conn struct {
 	// closed is a tombstone for closed Conns, so that double-closes
 	// are safe.
 	closed bool
-	// readDeadline is the requested deadline for reads from the
-	// session socket.
-	readDeadline time.Time
-	// writeDeadline is the requested deadline for writes to the
-	// session socket.
-	writeDeadline time.Time
 }
 
 // New creates a PPPoE Conn on the given interface.
@@ -79,8 +78,17 @@ func New(ctx context.Context, ifName string) (*Conn, error) {
 		return nil, err
 	}
 
+	// Create the channel.
+	f, err := newChannel(sessionFd)
+	if err != nil {
+		closeSessionFd(sessionFd)
+		disco.Close()
+		return nil, err
+	}
+
 	return &Conn{
 		sessionFd: sessionFd,
+		channel:   f,
 		discovery: disco,
 		addr: Addr{
 			Interface:        ifName,
@@ -110,9 +118,13 @@ func (c *Conn) Close() error {
 	}
 
 	c.closed = true
+	channelErr := c.channel.Close()
 	sessErr := closeSessionFd(c.sessionFd)
 	padtErr := sendPADT(c.discovery, c.addr.ConcentratorAddr, c.addr.SessionID)
 	discErr := c.discovery.Close()
+	if channelErr != nil {
+		return channelErr
+	}
 	if sessErr != nil {
 		return sessErr
 	}
@@ -127,47 +139,26 @@ func (c *Conn) Close() error {
 
 // Read reads a packet from the PPPoE session.
 func (c *Conn) Read(b []byte) (int, error) {
-	return readSessionPacket(c.sessionFd, b, c.readDeadline)
+	return c.channel.Read(b)
 }
 
 // Write writes a packet to the PPPoE session.
 func (c *Conn) Write(b []byte) (int, error) {
-	return sendSessionPacket(c.sessionFd, b, c.writeDeadline)
+	return c.channel.Write(b)
 }
 
 // SetDeadline sets both the read and write deadlines for future Read
-// and Write operations. Note that it does not alter the deadline of
-// currently in-flight read/write operations, unlike fully conforming
-// net.Conn implementations.
+// and Write operations.
 func (c *Conn) SetDeadline(deadline time.Time) error {
-	// TODO: if we ever care in the future, make this function and the
-	// following ones conforming, somehow?
-	c.readDeadline = deadline
-	c.writeDeadline = deadline
-	return nil
+	return c.channel.SetDeadline(deadline)
 }
 
-// SetReadDeadline sets the deadline for future Read operations. Note
-// that it does not alter the deadline of currently in-flight read
-// operations, unlike fully conforming net.Conn implementations.
+// SetReadDeadline sets the deadline for future Read operations.
 func (c *Conn) SetReadDeadline(deadline time.Time) error {
-	c.readDeadline = deadline
-	return nil
+	return c.channel.SetReadDeadline(deadline)
 }
 
-// SetWriteDeadline sets the deadline for future Write operations. Note
-// that it does not alter the deadline of currently in-flight write
-// operations, unlike fully conforming net.Conn implementations.
+// SetWriteDeadline sets the deadline for future Write operations.
 func (c *Conn) SetWriteDeadline(deadline time.Time) error {
-	c.writeDeadline = deadline
-	return nil
+	return c.channel.SetWriteDeadline(deadline)
 }
-
-type pppoeError struct {
-	msg     string
-	timeout bool
-}
-
-func (e pppoeError) Error() string   { return e.msg }
-func (e pppoeError) Temporary() bool { return true }
-func (e pppoeError) Timeout() bool   { return e.timeout }
