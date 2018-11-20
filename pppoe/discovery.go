@@ -35,6 +35,10 @@ const (
 	pppoeTagCookie      = 0x0104 // The PPPoE equivalent of a syncookie.
 )
 
+// pppoeBufferLen is the maximum size of a PPPoE packet. The spec says
+// that PPPoE packets may not exceed the ethernet MTU, which is 1500.
+const pppoeBufferLen = 1500
+
 var (
 	// padiPacket is a PPPoE Active Discovery Initiation (PADI) packet
 	// that sollicits session offers from any available PPPoE
@@ -132,7 +136,7 @@ func sendPADI(conn net.PacketConn) error {
 // readPADO waits to receive a valid PPPoE Active Discovery Offer
 // (PADO) packet, and returns relevant information from it.
 func readPADO(ctx context.Context, conn net.PacketConn) (concentratorAddr net.Addr, cookie []byte, err error) {
-	var b [1500]byte
+	var b [pppoeBufferLen]byte
 
 	if deadline, ok := ctx.Deadline(); ok {
 		conn.SetReadDeadline(deadline)
@@ -187,7 +191,7 @@ func sendPADR(conn net.PacketConn, concentrator net.Addr, cookie []byte) error {
 }
 
 func readPADS(ctx context.Context, conn net.PacketConn, concentrator net.Addr) (sessionID uint16, err error) {
-	var b [1500]byte
+	var b [pppoeBufferLen]byte
 
 	if deadline, ok := ctx.Deadline(); ok {
 		conn.SetReadDeadline(deadline)
@@ -222,6 +226,38 @@ func parsePADS(buf []byte) (sessionID uint16, err error) {
 		return 0, errors.New("not a PADS packet")
 	}
 	return pkt.SessionID, nil
+}
+
+func readPADT(conn net.PacketConn, concentrator net.HardwareAddr, sessionID uint16) error {
+	var b [pppoeBufferLen]byte
+
+	for {
+		n, from, err := conn.ReadFrom(b[:])
+		if err != nil {
+			return err
+		}
+
+		if concentrator.String() != from.String() {
+			// Wrong peer, keep waiting
+			continue
+		}
+
+		pkt, err := parseDiscoveryPacket(b[:n])
+		if err != nil {
+			// Bad packet, keep waiting
+			continue
+		}
+
+		if pkt.Code != pppoePADT || pkt.SessionID != sessionID {
+			// Not a PADT meant for our session. This socket receives
+			// all PPPoE traffic, so we could be receiving a different
+			// session's PADT. Keep waiting.
+			continue
+		}
+
+		// Got a PADT.
+		return nil
+	}
 }
 
 func sendPADT(conn net.PacketConn, concentrator net.HardwareAddr, sessionID uint16) error {
