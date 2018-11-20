@@ -1,5 +1,5 @@
 // Package pppoe creates a PPPoE session with a remote server.
-package pppoe
+package pppoe // import "go.universe.tf/ppp/pppoe"
 
 import (
 	"context"
